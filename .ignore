@@ -1,0 +1,13 @@
+# Ignore files for search tools and local workflows
+.venv/
+__pycache__/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
