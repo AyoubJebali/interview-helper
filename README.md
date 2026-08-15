@@ -48,26 +48,3 @@ A Python voice agent project using Pipecat, Whisper STT, OpenRouter LLM, and Kok
 ```bash
 python agent.py
 ```
-
-## GitHub Upload
-
-If this folder is not yet a git repository:
-
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-```
-
-Create a new empty repository on GitHub, then run:
-
-```bash
-git remote add origin <your-github-repo-url>
-git branch -M main
-git push -u origin main
-```
-
-## Notes
-
-- Do not commit `.env`.
-- Keep secrets only in local environment files or GitHub secrets.
