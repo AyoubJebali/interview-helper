@@ -1,3 +1,5 @@
 # Missing imports from agent.py
 loguru
 pipecat-ai
+chromadb
+sentence-transformers

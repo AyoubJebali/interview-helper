@@ -23,6 +23,8 @@ from pipecat.services.whisper.stt import WhisperSTTService
 from pipecat.transports.base_transport import TransportParams
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 
+from rag import InterviewRAG, RAGContextInjector
+
 
 def load_dotenv(dotenv_path: Path) -> None:
     """Minimal .env loader to avoid adding external dependencies."""
@@ -39,6 +41,9 @@ def load_dotenv(dotenv_path: Path) -> None:
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
+# Built once per process (not per call) so the question bank is only embedded once.
+interview_rag = InterviewRAG(Path(__file__).resolve().parent / "interview_questions.md")
+
 
 async def run_bot(transport):
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
@@ -46,10 +51,10 @@ async def run_bot(transport):
         raise ValueError("Missing OPENROUTER_API_KEY. Set it in the .env file.")
 
     stt = WhisperSTTService(
-        device="cuda",
-        compute_type="float16",
+        device="cpu",
+        compute_type="int8",
         settings=WhisperSTTService.Settings(
-            model=WhisperModel.LARGE,
+            model=WhisperModel.BASE,
         ),
     )
 
@@ -68,9 +73,13 @@ async def run_bot(transport):
         messages=[
             {
                 "role": "system",
-                "content": """You are Ava, a warm and professional virtual real estate agent for BeenBee serving Tunis. 
-                                You speak naturally, like an experienced human agent — not a script reader. Keep responses conversational 
-                                and under 3 sentences unless the caller asks for detail..""",
+                "content": """You are Iris, a friendly mock interviewer. Start by greeting the candidate and asking
+                                what role or domain they'd like to practice for (e.g. software engineering, behavioral,
+                                data/product, system design). Then ask one interview question at a time, listen to
+                                their answer, give brief constructive feedback, and ask a natural follow-up or move to
+                                the next question. When the context includes a "Relevant interview questions from the
+                                question bank" list, prefer drawing your next question from that list rather than
+                                inventing one. Keep your turns short and conversational, like a real interviewer.""",
             }
         ]
     )
@@ -88,6 +97,7 @@ async def run_bot(transport):
             transport.input(),
             stt,
             aggregators.user(),
+            RAGContextInjector(interview_rag),
             llm,
             tts,
             transport.output(),
