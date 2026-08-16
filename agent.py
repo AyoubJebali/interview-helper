@@ -19,6 +19,7 @@ logger.remove()
 logger.add(sys.stderr, level="DEBUG")
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
@@ -131,10 +132,11 @@ async def run_bot(transport):
         raise ValueError("Missing OPENROUTER_API_KEY. Set it in the .env file.")
 
     stt = WhisperSTTService(
-        device="cpu",
-        compute_type="int8",
+        device="auto",
+        compute_type="default",
         settings=WhisperSTTService.Settings(
             model=WhisperModel.BASE,
+            no_speech_prob=0.5,
         ),
     )
 
@@ -164,10 +166,20 @@ async def run_bot(transport):
         ]
     )
 
+    vad_stop_secs = float(os.getenv("VAD_STOP_SECS", "2.0"))
+    vad_analyzer = SileroVADAnalyzer(
+        params=VADParams(
+            confidence=0.7,
+            start_secs=0.2,
+            stop_secs=vad_stop_secs,
+            min_volume=0.6,
+        )
+    )
+
     aggregators = LLMContextAggregatorPair(
         context=context,
         user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(),
+            vad_analyzer=vad_analyzer,
         ),
     )
 
@@ -251,12 +263,13 @@ async def get_questions():
 @app.get("/api/config")
 async def get_config():
     """Returns current agent pipeline configuration."""
+    vad_stop_secs = float(os.getenv("VAD_STOP_SECS", "2.0"))
     return {
         "persona": "Iris Mock Interviewer",
         "stt": "Whisper STT (Base, int8 CPU)",
         "llm": "google/gemma-4-26b-a4b-it:free",
         "tts": "Kokoro (af_heart)",
-        "vad": "Silero VAD",
+        "vad": f"Silero VAD (stop_secs={vad_stop_secs}s)",
         "rag": "ChromaDB + all-MiniLM-L6-v2",
     }
 

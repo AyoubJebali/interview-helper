@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en" data-theme="luxury">
+<head>
+<meta charset="UTF-8">
+<title>Iris → Next.js/Vercel Migration Plan</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :where(.grid, .flex) > * { min-width: 0; }
+  :where(p, h1, h2, h3, h4, li, td, th, .badge) { overflow-wrap: anywhere; }
+  :where(img, svg, canvas) { max-width: 100%; height: auto; }
+  body { background: var(--color-base-100); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+</style>
+</head>
+<body class="min-h-screen bg-base-100 text-base-content">
+
+<main class="mx-auto max-w-6xl p-6 lg:p-10 space-y-10">
+
+  <!-- Header -->
+  <header class="space-y-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <span class="badge badge-primary badge-lg">Migration Plan</span>
+      <span class="badge badge-outline">Not yet implemented</span>
+    </div>
+    <h1 class="text-4xl lg:text-5xl font-bold tracking-tight">Iris Voice Agent → Next.js on Vercel</h1>
+    <p class="text-lg text-base-content/70 max-w-3xl">
+      A full architectural rewrite, not a code port. Vercel's serverless/edge runtime cannot host the current
+      persistent Python pipeline, so the realtime voice loop, RAG store, and UI all change shape.
+    </p>
+  </header>
+
+  <!-- Context -->
+  <section class="grid lg:grid-cols-2 gap-6">
+    <div class="card card-border bg-base-200">
+      <div class="card-body">
+        <h2 class="card-title text-error">Current state <span class="badge badge-error badge-soft">Python, stateful</span></h2>
+        <ul class="list-disc list-inside space-y-1 text-sm text-base-content/80">
+          <li>FastAPI app (<code class="mono">agent.py</code>) runs a <b>persistent</b> Pipecat pipeline per WebRTC call</li>
+          <li>Local Whisper STT + local Silero VAD + local Kokoro TTS (ONNX)</li>
+          <li>In-memory ChromaDB for RAG over <code class="mono">interview_questions.md</code> (<code class="mono">rag.py</code>)</li>
+          <li>LLM via OpenRouter (<code class="mono">google/gemma-4-26b-a4b-it:free</code>)</li>
+          <li>Custom WebRTC signaling routes: <code class="mono">/api/offer</code>, <code class="mono">/sessions/{id}/...</code></li>
+          <li>Vanilla JS/HTML/CSS client in <code class="mono">static/</code></li>
+        </ul>
+      </div>
+    </div>
+    <div class="card card-border bg-base-200">
+      <div class="card-body">
+        <h2 class="card-title text-success">Why it can't just move <span class="badge badge-warning badge-soft">Vercel constraint</span></h2>
+        <ul class="list-disc list-inside space-y-1 text-sm text-base-content/80">
+          <li>No persistent process — every request is a stateless serverless/edge invocation</li>
+          <li>No GPU / local ML inference (PyTorch, ctranslate2, onnxruntime w/ local models)</li>
+          <li>No in-memory vector DB that survives between requests</li>
+          <li>No long-lived WebRTC media server for the voice call itself</li>
+        </ul>
+        <div class="alert alert-info alert-soft mt-2 text-sm">
+          <span>Decided with the user: rebuild the realtime loop on <b>OpenAI Realtime API</b> (browser ↔ OpenAI directly)
+          and move RAG storage to <b>Upstash Vector</b> — both fit Vercel's serverless model cleanly.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture diagram -->
+  <section class="space-y-3">
+    <h2 class="text-2xl font-bold">Target architecture</h2>
+    <p class="text-base-content/70 text-sm max-w-3xl">The browser owns the realtime media connection directly to OpenAI. Vercel only ever mints a short-lived token and answers small stateless API calls — nothing on Vercel holds a call open.</p>
+    <div class="card card-border bg-base-200">
+      <div class="card-body overflow-x-auto">
+        <pre class="mermaid">
+flowchart TD
+    U["Browser client (Next.js / React)"]
+    V["Vercel: /api/realtime/session\n(mints ephemeral OpenAI token)"]
+    R["Vercel: /api/rag/search\n(embeds query, queries vector DB)"]
+    Q["Vercel: /api/questions\n(question bank by domain)"]
+    O["OpenAI Realtime API\n(STT + LLM + TTS + VAD, one WebRTC conn)"]
+    UP[("Upstash Vector\ninterview_questions.md embeddings")]
+
+    U -- "1. fetch ephemeral token" --> V
+    V -- "client_secret" --> U
+    U == "2. WebRTC: mic in / audio out / data channel" ==> O
+    O -- "3. tool call: search_question_bank(query)" --> U
+    U -- "4. POST query" --> R
+    R -- "5. vector query" --> UP
+    UP -- matches --> R
+    R -- results --> U
+    U -- "6. function_call_output + response.create" --> O
+    U -. "domain list on load" .-> Q
+        </pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Component mapping -->
+  <section class="space-y-3">
+    <h2 class="text-2xl font-bold">Old → new mapping</h2>
+    <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-100">
+      <table class="table table-zebra">
+        <thead>
+          <tr><th>Concern</th><th>Today (Python)</th><th>After migration</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="font-semibold">Realtime transport</td>
+            <td class="mono text-sm">SmallWebRTCTransport + <br>/api/offer, /sessions/…</td>
+            <td>Browser ↔ OpenAI Realtime API directly (WebRTC); removed entirely from our server</td>
+          </tr>
+          <tr>
+            <td class="font-semibold">STT / TTS / VAD</td>
+            <td class="mono text-sm">Whisper (local) / Kokoro (local) / Silero</td>
+            <td>Bundled into OpenAI Realtime API connection</td>
+          </tr>
+          <tr>
+            <td class="font-semibold">LLM</td>
+            <td class="mono text-sm">OpenRouter · gemma-4-26b-a4b-it</td>
+            <td>OpenAI Realtime model, persona via <code class="mono">session.update</code></td>
+          </tr>
+          <tr>
+            <td class="font-semibold">RAG injection</td>
+            <td class="mono text-sm">RAGContextInjector (server-side, per turn)</td>
+            <td>Realtime <b>tool call</b> <code class="mono">search_question_bank</code>, handled client-side</td>
+          </tr>
+          <tr>
+            <td class="font-semibold">Vector store</td>
+            <td class="mono text-sm">ChromaDB EphemeralClient (in-memory)</td>
+            <td>Upstash Vector, seeded once via <code class="mono">scripts/seed-rag.ts</code></td>
+          </tr>
+          <tr>
+            <td class="font-semibold">UI event fan-out</td>
+            <td class="mono text-sm">UIEventBroadcaster → DataChannel JSON</td>
+            <td>OpenAI Realtime server events parsed client-side in <code class="mono">useRealtimeVoiceAgent</code></td>
+          </tr>
+          <tr>
+            <td class="font-semibold">Client UI</td>
+            <td class="mono text-sm">static/ (vanilla JS/HTML/CSS)</td>
+            <td>React components under Next.js App Router, same dark-mode design</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- File plan as steps -->
+  <section class="space-y-3">
+    <h2 class="text-2xl font-bold">File plan</h2>
+    <ul class="steps steps-vertical w-full">
+      <li class="step step-primary">
+        <div class="text-left ml-2">
+          <div class="font-semibold">Scaffold Next.js (TS, App Router)</div>
+          <div class="text-sm text-base-content/60">at repo root, replacing the FastAPI entry point</div>
+        </div>
+      </li>
+      <li class="step step-primary">
+        <div class="text-left ml-2">
+          <div class="font-semibold">Port UI</div>
+          <div class="text-sm text-base-content/60"><code class="mono">style.css</code> → <code class="mono">globals.css</code>; <code class="mono">orb_visualizer.js</code> → <code class="mono">NeuralOrb.tsx</code>; index.html layout → React components (TranscriptPanel, RagPanel, DeviceSettings, SessionControls)</div>
+        </div>
+      </li>
+      <li class="step step-primary">
+        <div class="text-left ml-2">
+          <div class="font-semibold"><code class="mono">hooks/useRealtimeVoiceAgent.ts</code></div>
+          <div class="text-sm text-base-content/60">RTCPeerConnection + data channel setup, parses OpenAI Realtime events into the same UI event shape UIEventBroadcaster used to emit</div>
+        </div>
+      </li>
+      <li class="step step-primary">
+        <div class="text-left ml-2">
+          <div class="font-semibold">API routes</div>
+          <div class="text-sm text-base-content/60"><code class="mono">/api/realtime/session</code> (ephemeral token + persona + tool defs), <code class="mono">/api/rag/search</code>, <code class="mono">/api/questions</code></div>
+        </div>
+      </li>
+      <li class="step step-primary">
+        <div class="text-left ml-2">
+          <div class="font-semibold"><code class="mono">scripts/seed-rag.ts</code></div>
+          <div class="text-sm text-base-content/60">ports <code class="mono">load_question_chunks</code>, embeds via OpenAI, upserts to Upstash Vector — run manually, not per-request</div>
+        </div>
+      </li>
+      <li class="step step-primary">
+        <div class="text-left ml-2">
+          <div class="font-semibold">Env vars</div>
+          <div class="text-sm text-base-content/60"><code class="mono">OPENAI_API_KEY</code>, <code class="mono">UPSTASH_VECTOR_REST_URL</code>, <code class="mono">UPSTASH_VECTOR_REST_TOKEN</code></div>
+        </div>
+      </li>
+      <li class="step">
+        <div class="text-left ml-2">
+          <div class="font-semibold">Retire Python backend</div>
+          <div class="text-sm text-base-content/60">remove agent.py, rag.py, requirements.txt, old static/ once parity is verified (recoverable via git history)</div>
+        </div>
+      </li>
+      <li class="step">
+        <div class="text-left ml-2">
+          <div class="font-semibold">Deploy</div>
+          <div class="text-sm text-base-content/60"><code class="mono">vercel link</code>, set env vars in dashboard, <code class="mono">vercel deploy</code></div>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <!-- Verification -->
+  <section class="space-y-3">
+    <h2 class="text-2xl font-bold">Verification</h2>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="card card-border bg-base-200">
+        <div class="card-body">
+          <h3 class="card-title text-base">Local (npm run dev)</h3>
+          <ul class="list-disc list-inside text-sm space-y-1 text-base-content/80">
+            <li>Mic permission → connect → WebRTC reaches OpenAI, Iris greets</li>
+            <li>Live transcript renders while speaking (STT)</li>
+            <li>Reply audio drives the orb visualizer (TTS + Web Audio analyser)</li>
+            <li>Mid-conversation tool call triggers RAG panel update, grounds next question</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card card-border bg-base-200">
+        <div class="card-body">
+          <h3 class="card-title text-base">Direct / deployed checks</h3>
+          <ul class="list-disc list-inside text-sm space-y-1 text-base-content/80">
+            <li><code class="mono">curl -X POST /api/rag/search -d '{"query":"system design"}'</code></li>
+            <li>Vercel preview: repeat full flow end-to-end</li>
+            <li>Confirm <code class="mono">OPENAI_API_KEY</code> never appears client-side (Network tab / bundle)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.esm.min.mjs";
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const paint = document.createElement("canvas").getContext("2d");
+  function toRgba(color) {
+    paint.clearRect(0, 0, 1, 1);
+    paint.fillStyle = "#000";
+    paint.fillStyle = color;
+    paint.fillRect(0, 0, 1, 1);
+    return paint.getImageData(0, 0, 1, 1).data;
+  }
+  function compositeRgba(fg, bg) {
+    const fa = fg[3] / 255, ba = bg[3] / 255;
+    const a = fa + ba * (1 - fa);
+    if (a === 0) return [0, 0, 0, 0];
+    return [
+      (fg[0]*fa + bg[0]*ba*(1-fa)) / a,
+      (fg[1]*fa + bg[1]*ba*(1-fa)) / a,
+      (fg[2]*fa + bg[2]*ba*(1-fa)) / a,
+      a * 255,
+    ];
+  }
+  function pageIsDark() {
+    const root = document.documentElement;
+    const rootBg = toRgba(getComputedStyle(root).backgroundColor);
+    const bodyBg = document.body ? toRgba(getComputedStyle(document.body).backgroundColor) : [0,0,0,0];
+    const [r,g,b,a] = compositeRgba(bodyBg, rootBg);
+    if (a > 0) return (0.2126*r + 0.7152*g + 0.0722*b) / 255 < 0.5;
+    const cs = getComputedStyle(root).colorScheme;
+    if (cs.includes("dark") && !cs.includes("light")) return true;
+    if (cs.includes("light") && !cs.includes("dark")) return false;
+    return darkQuery.matches;
+  }
+  const diagrams = [...document.querySelectorAll(".mermaid")].map((el) => ({ el, src: el.textContent }));
+  let applied, rendering = false, queued = false;
+  function queueRender() { queued = true; if (!rendering) void render(); }
+  async function render() {
+    rendering = true;
+    try {
+      while (queued) {
+        queued = false;
+        const theme = pageIsDark() ? "dark" : "default";
+        if (theme === applied) continue;
+        mermaid.initialize({ startOnLoad: false, theme, securityLevel: "strict" });
+        for (const { el, src } of diagrams) { el.removeAttribute("data-processed"); el.textContent = src; }
+        try { await mermaid.run({ nodes: diagrams.map((d) => d.el) }); }
+        catch (e) { console.error("Mermaid render failed:", e); return; }
+        applied = theme;
+      }
+    } finally {
+      rendering = false;
+      if (queued) queueRender();
+    }
+  }
+  if (document.readyState === "complete") queueRender();
+  else window.addEventListener("load", queueRender, { once: true });
+  const themeObserver = new MutationObserver(queueRender);
+  for (const el of [document.documentElement, document.body]) {
+    if (!el) continue;
+    themeObserver.observe(el, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
+  }
+  darkQuery.addEventListener("change", queueRender);
+</script>
+
+</body>
+</html>
