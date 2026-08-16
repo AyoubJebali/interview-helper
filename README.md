@@ -4,13 +4,17 @@ A Python voice mock-interviewer agent using Pipecat, Whisper STT, OpenRouter LLM
 
 ## Project Structure
 
-- `agent.py`: Main application entry point — builds the voice pipeline.
-- `rag.py`: RAG logic — loads the question bank into a vector store and retrieves relevant questions per turn.
+- `agent.py`: Main application entry point — builds the voice pipeline, event broadcaster, and FastAPI server.
+- `rag.py`: RAG logic — loads the question bank into ChromaDB and retrieves relevant questions per turn.
 - `interview_questions.md`: The question bank RAG retrieves from.
+- `static/`: Modern dark-mode web application:
+  - `index.html`: Responsive split-stage interface with Hero visualizer and side inspector.
+  - `style.css`: HSL-based design system with glassmorphism, micro-interactions, and dark mode tokens.
+  - `orb_visualizer.js`: Canvas-based Glowing Fluid Neural Orb reacting to microphone and AI audio frequencies.
+  - `app.js`: WebRTC connection manager, Web Audio API analyzers, DataChannel event processor, and live transcript stream.
+  - `favicon.svg`: Custom SVG icon.
 - `requirements.txt`: Python dependencies.
 - `.env.example`: Example environment variables.
-- `.gitignore`: Git ignore rules.
-- `.ignore`: Optional ignore rules for local tools.
 
 ## Prerequisites
 

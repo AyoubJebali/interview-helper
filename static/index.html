@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iris Voice Agent - Real-Time AI Mock Interviewer</title>
+  <meta name="description" content="Real-time voice AI mock interviewer with RAG-grounded question bank, responsive neural audio visualizers, live transcription, and WebRTC streaming.">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Hidden audio element for WebRTC remote output -->
+  <audio id="remote-audio" autoplay playsinline></audio>
+
+  <div class="app-root">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="brand-section">
+        <div class="brand-logo-wrap">
+          <svg class="brand-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9" stroke="var(--cyan-400)" />
+            <path d="M9 12a3 3 0 0 1 6 0v1a3 3 0 0 1-6 0v-1z" fill="var(--cyan-400)" />
+            <path d="M12 16v3m-3 0h6" stroke="var(--indigo-400)" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">
+            Iris Voice Agent
+            <span class="brand-badge">Mock Interviewer</span>
+          </div>
+          <div class="brand-subtitle">Pipecat WebRTC • Whisper STT • OpenRouter LLM • Kokoro TTS</div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Live Status Pill -->
+        <div class="connection-status-pill" id="connection-status" data-status="disconnected">
+          <div class="status-dot"></div>
+          <span id="status-text">Disconnected</span>
+        </div>
+
+        <!-- Session Timer -->
+        <div class="session-timer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span id="session-timer">00:00</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace (Split View) -->
+    <main class="main-stage-container">
+      <!-- Left / Center: Hero Voice Visualizer Stage -->
+      <section class="hero-voice-stage">
+        <div class="hero-ambient-glow"></div>
+
+        <!-- Stage Top Bar: Domain Filter Chips & State Badge -->
+        <div class="stage-top-bar">
+          <div class="stage-role-pills">
+            <button class="role-chip selected" data-role="Software Engineering">
+              <span>💻</span> Software Engineering
+            </button>
+            <button class="role-chip" data-role="System Design">
+              <span>🏗️</span> System Design
+            </button>
+            <button class="role-chip" data-role="Behavioral">
+              <span>🤝</span> Behavioral
+            </button>
+            <button class="role-chip" data-role="Data / Product">
+              <span>📊</span> Data / Product
+            </button>
+          </div>
+
+          <div class="state-badge" id="stage-state-badge" data-state="idle">
+            <svg class="state-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+            <span id="state-badge-text">Ready to begin your mock interview</span>
+          </div>
+        </div>
+
+        <!-- Central Hero Visualizer Canopy -->
+        <div class="visualizer-hero-wrapper">
+          <canvas id="neural-orb-canvas"></canvas>
+        </div>
+
+        <!-- Dual Audio Activity Gauges (Candidate & Iris) -->
+        <div class="dual-audio-hud">
+          <!-- Candidate Mic Activity Card -->
+          <div class="audio-hud-card">
+            <div class="hud-header">
+              <div class="hud-channel-info">
+                <svg class="hud-icon" style="color: var(--emerald-400);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                </svg>
+                <span>Candidate Mic</span>
+              </div>
+              <canvas class="hud-waveform-canvas" id="mic-wave-canvas" width="80" height="18"></canvas>
+            </div>
+            <div class="hud-meter-wrap">
+              <div class="hud-progress-bar">
+                <div class="hud-progress-fill mic-fill" id="mic-hud-fill"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Iris Voice Activity Card -->
+          <div class="audio-hud-card">
+            <div class="hud-header">
+              <div class="hud-channel-info">
+                <svg class="hud-icon" style="color: var(--cyan-400);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                </svg>
+                <span>Iris AI Voice</span>
+              </div>
+              <canvas class="hud-waveform-canvas" id="bot-wave-canvas" width="80" height="18"></canvas>
+            </div>
+            <div class="hud-meter-wrap">
+              <div class="hud-progress-bar">
+                <div class="hud-progress-fill bot-fill" id="bot-hud-fill"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Primary Interaction Dock -->
+        <div class="hero-controls-dock">
+          <div class="primary-buttons-row">
+            <!-- Mic Mute Button -->
+            <button class="dock-circle-btn" id="btn-mute" title="Mute Microphone" disabled>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </button>
+
+            <!-- Main CTA Connect/Disconnect Button -->
+            <button class="btn-connect-agent" id="btn-connect" data-connected="false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+              </svg>
+              Start Mock Interview
+            </button>
+
+            <!-- Interrupt / Tap to Speak Button -->
+            <button class="dock-circle-btn" id="btn-interrupt" title="Interrupt Iris" disabled>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                <line x1="19" y1="5" x2="19" y2="19"></line>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Fallback Chat Bar -->
+          <div class="fallback-input-bar">
+            <input type="text" class="chat-text-input" id="chat-text-input" placeholder="Type a message or role request to Iris..." />
+            <button class="btn-send-text" id="btn-send-text" title="Send message">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: Split Panel (Transcript, RAG Knowledge Base, Settings) -->
+      <aside class="panel-stage-container">
+        <!-- Tab Navigation -->
+        <nav class="panel-tab-header">
+          <button class="tab-btn active" data-tab="transcript">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            Live Transcript
+            <span class="tab-count-badge" id="transcript-count-badge">0</span>
+          </button>
+
+          <button class="tab-btn" data-tab="rag">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            RAG & Questions
+            <span class="tab-count-badge" id="rag-count-badge">0</span>
+          </button>
+
+          <button class="tab-btn" data-tab="settings">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            Config
+          </button>
+        </nav>
+
+        <!-- Panel Body Views -->
+        <div class="panel-body-content">
+          <!-- TAB 1: Live Transcript View -->
+          <div class="panel-tab-view active" id="tab-view-transcript">
+            <div class="transcript-actions-bar">
+              <input type="text" class="transcript-filter-input" id="transcript-filter" placeholder="Search transcript..." />
+              <div class="transcript-action-group">
+                <button class="transcript-icon-btn" id="btn-copy-transcript" title="Copy transcript markdown">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  Copy
+                </button>
+                <button class="transcript-icon-btn" id="btn-export-transcript" title="Export as JSON">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  Export
+                </button>
+                <button class="transcript-icon-btn" id="btn-clear-transcript" title="Clear transcript">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="transcript-messages-feed" id="transcript-feed">
+              <div class="empty-transcript-state" id="empty-transcript">
+                <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <p>Your conversation transcript will appear here live once the interview starts.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: RAG Knowledge Inspector -->
+          <div class="panel-tab-view" id="tab-view-rag">
+            <div class="rag-inspector-container">
+              <!-- Live Retrieval Stream -->
+              <div class="rag-section-card">
+                <div class="rag-card-title">
+                  <span>⚡ Real-Time RAG Retrievals</span>
+                </div>
+                <div class="rag-live-feed" id="rag-live-feed">
+                  <p style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 12px 0;">
+                    When candidate speaks, questions retrieved from ChromaDB vector search will appear here live.
+                  </p>
+                </div>
+              </div>
+
+              <!-- Question Bank Explorer -->
+              <div class="rag-section-card">
+                <div class="rag-card-title">
+                  <span>📚 Question Bank (`interview_questions.md`)</span>
+                </div>
+                <div class="question-bank-tree" id="question-bank-tree">
+                  <!-- Rendered dynamically -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 3: Settings & Pipeline Config -->
+          <div class="panel-tab-view" id="tab-view-settings">
+            <div class="settings-container">
+              <!-- Audio Devices -->
+              <div class="settings-group">
+                <div class="settings-group-title">Audio Hardware</div>
+                
+                <div class="setting-row">
+                  <label class="setting-label" for="mic-select">Microphone Input</label>
+                  <select class="setting-select" id="mic-select">
+                    <option value="">Default Microphone</option>
+                  </select>
+                </div>
+
+                <div class="setting-row">
+                  <label class="setting-label" for="speaker-select">Audio Output (Speaker)</label>
+                  <select class="setting-select" id="speaker-select">
+                    <option value="">Default Speaker</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Audio Processing Toggles -->
+              <div class="settings-group">
+                <div class="settings-group-title">Audio Processing</div>
+                
+                <div class="setting-toggle-row">
+                  <span class="setting-label">Acoustic Echo Cancellation</span>
+                  <label class="switch">
+                    <input type="checkbox" id="echo-cancellation-toggle" checked>
+                    <span class="slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-toggle-row">
+                  <span class="setting-label">Noise Suppression</span>
+                  <label class="switch">
+                    <input type="checkbox" id="noise-suppression-toggle" checked>
+                    <span class="slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-toggle-row">
+                  <span class="setting-label">Auto Gain Control</span>
+                  <label class="switch">
+                    <input type="checkbox" id="auto-gain-toggle" checked>
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Pipeline Specifications -->
+              <div class="settings-group">
+                <div class="settings-group-title">Pipeline Architecture</div>
+                
+                <div class="stats-grid">
+                  <div class="stat-item">
+                    <span class="stat-title">STT Engine</span>
+                    <span class="stat-value">Whisper (CPU int8)</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-title">VAD Analyzer</span>
+                    <span class="stat-value">Silero VAD</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-title">LLM Model</span>
+                    <span class="stat-value">Gemma 4 26B (OpenRouter)</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-title">TTS Voice</span>
+                    <span class="stat-value">Kokoro (af_heart)</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-title">Vector Store</span>
+                    <span class="stat-value">ChromaDB Ephemeral</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-title">Embeddings</span>
+                    <span class="stat-value">all-MiniLM-L6-v2</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container"></div>
+  </div>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
