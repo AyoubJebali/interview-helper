@@ -1,29 +1,16 @@
-# Python cache and bytecode
+# python
 __pycache__/
-*.py[cod]
-*$py.class
-
-# Virtual environment
+*.pyc
 .venv/
-venv/
-env/
+*.db
 
-# Environment variables and secrets
+# node
+node_modules/
+dist/
+
+# env
 .env
-.env.*
-!.env.example
+.env.local
 
-# Tooling and test caches
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-
-# IDE files
-.vscode/
-.idea/
-
-# OS files
+# misc
 .DS_Store
-Thumbs.db

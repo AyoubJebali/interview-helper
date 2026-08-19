@@ -135,7 +135,7 @@ async def run_bot(transport):
         device="auto",
         compute_type="default",
         settings=WhisperSTTService.Settings(
-            model=WhisperModel.BASE,
+            model=WhisperModel.LARGE,
             no_speech_prob=0.5,
         ),
     )
