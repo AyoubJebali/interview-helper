@@ -23,3 +23,7 @@ class Token(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+class OfferRequest(BaseModel):
+    sdp: str
+    type: str
