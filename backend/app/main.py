@@ -1,5 +1,8 @@
 import asyncio
 
+from dotenv import load_dotenv
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,7 +12,20 @@ from app.api.sessions import router as interview_router
 from app.core.config import settings
 from app.db import init_db
 
-app = FastAPI(title=settings.PROJECT_NAME)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+
+    # Everything BEFORE 'yield' runs on startup
+    load_dotenv()
+    init_db()
+    asyncio.create_task(session_manager.start_runner())
+
+    yield  # The app serves requests while frozen here
+    
+    # Everything AFTER 'yield' runs on shutdown
+    pass
+
+app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

@@ -23,7 +23,7 @@ class Session:
 class SessionManager:
     def __init__(self):
         self._sessions: dict[str, Session] = {}
-        self._runner: WorkerRunner = WorkerRunner()
+        self._runner: WorkerRunner = WorkerRunner(handle_sigint=True, handle_sigterm=True)
 
     async def start_runner(self):
         await self._runner.run(auto_end=False)
