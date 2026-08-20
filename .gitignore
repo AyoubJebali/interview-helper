@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .venv/
 *.db
+backend/tests/fixtures/*.wav
 
 # node
 node_modules/
