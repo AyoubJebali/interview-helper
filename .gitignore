@@ -14,3 +14,9 @@ dist/
 
 # misc
 .DS_Store
+Thumbs.db
+
+.lavish/
+
+# Local planning notes, not for upload
+plan.md
