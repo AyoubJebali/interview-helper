@@ -7,7 +7,7 @@ from app.deps import get_current_user
 from app.models.user import User
 from app.schemas import LoginRequest, Token, UserCreate, UserRead
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
