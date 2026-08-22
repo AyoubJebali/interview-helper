@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.services.session_manager import session_manager
 from app.api.auth import router as auth_router
-from app.api.sessions import router as interview_router
+from app.api.sessions import router as sessions_router
 from app.core.config import settings
 from app.db import init_db
 
@@ -36,4 +36,4 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api")
-app.include_router(interview_router, prefix="/api")
+app.include_router(sessions_router, prefix="/api")
