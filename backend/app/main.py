@@ -37,8 +37,3 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(interview_router, prefix="/api")
-
-@app.on_event("startup")
-async def on_startup():
-    init_db()
-    asyncio.create_task(session_manager.start_runner())

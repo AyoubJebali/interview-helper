@@ -12,11 +12,15 @@ models, so it's skipped automatically when that key isn't configured.
 import asyncio
 import os
 
+from dotenv import load_dotenv
+
 import pytest
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRecorder
 
 from tests.audio_utils import GatedAudioTrack, has_spoken_response, wait_for_ice_gathering_complete
+
+load_dotenv()
 
 requires_openrouter = pytest.mark.skipif(
     not os.getenv("OPENROUTER_API_KEY"),
