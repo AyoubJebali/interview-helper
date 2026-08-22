@@ -34,4 +34,13 @@ export const api = {
   me: () => request("/api/auth/me"),
 
   logout: () => localStorage.removeItem("token"),
+
+  createSession: (offer: { sdp: string; type: string }) =>
+    request("/api/sessions/create", { method: "POST", body: JSON.stringify(offer) }),
+
+  startSession: (sessionId: string) => request(`/api/sessions/${sessionId}/start`, { method: "POST" }),
+
+  stopSession: (sessionId: string) => request(`/api/sessions/${sessionId}/stop`, { method: "POST" }),
+
+  getSession: (sessionId: string) => request(`/api/sessions/${sessionId}`),
 };

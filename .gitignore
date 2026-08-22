@@ -8,6 +8,9 @@ backend/tests/fixtures/*.wav
 # node
 node_modules/
 dist/
+*.tsbuildinfo
+coverage/
+.vite/
 
 # env
 .env
