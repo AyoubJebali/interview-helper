@@ -227,7 +227,13 @@ buildBars(outMeter);
 function log(msg, cls=""){
   const t = new Date().toLocaleTimeString([], {hour12:false});
   const line = document.createElement("div");
-  line.innerHTML = `<span class="t">${t}</span>  <span class="${cls}">${msg}</span>`;
+  const tSpan = document.createElement("span");
+  tSpan.className = "t";
+  tSpan.textContent = t;
+  const msgSpan = document.createElement("span");
+  msgSpan.className = cls;
+  msgSpan.textContent = msg;
+  line.append(tSpan, document.createTextNode("  "), msgSpan);
   logEl.appendChild(line);
   logEl.scrollTop = logEl.scrollHeight;
 }
