@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>session probe</title>
+<style>
+  :root{
+    --bg: #0b0d0c;
+    --panel: #121513;
+    --line: #23281f;
+    --ink: #dfe6d9;
+    --dim: #7c8a76;
+    --live: #7fd858;
+    --live-dim: #2c4a22;
+    --warn: #e0a63a;
+    --err: #e05a4e;
+    --mono: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; background:var(--bg); color:var(--ink);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  body{
+    min-height:100vh;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding: 48px 20px;
+  }
+  .rig{
+    width: 100%;
+    max-width: 620px;
+  }
+  .head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom: 22px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 14px;
+  }
+  .head h1{
+    font-size: 14px; font-weight:600; letter-spacing:.02em; margin:0;
+    text-transform: lowercase;
+  }
+  .head h1 span{ color: var(--dim); }
+  .head .clock{ color: var(--dim); font-size:11px; }
+
+  .row{
+    display:flex; gap:8px; margin-bottom: 14px;
+  }
+  input[type=text]{
+    flex:1;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 9px 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    border-radius: 3px;
+    outline: none;
+  }
+  input[type=text]:focus{ border-color: var(--dim); }
+
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+
+  .btns{ display:flex; gap:8px; flex-wrap: wrap; margin-bottom: 4px; }
+  button{
+    font-family: var(--mono);
+    font-size: 12px;
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    padding: 9px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  button:hover:not(:disabled){ border-color: var(--live); color: var(--live); }
+  button:disabled{ opacity:.35; cursor:not-allowed; }
+  button.stop:hover:not(:disabled){ border-color: var(--err); color: var(--err); }
+  button.primary{ border-color: var(--live-dim); }
+
+  .status-line{
+    display:flex; align-items:center; gap:8px;
+    font-size:12px; color: var(--dim);
+    margin-top: 14px;
+  }
+  .dot{
+    width:7px; height:7px; border-radius:50%;
+    background: var(--dim);
+    flex-shrink:0;
+  }
+  .dot.live{ background: var(--live); box-shadow: 0 0 6px var(--live); }
+  .dot.warn{ background: var(--warn); }
+  .dot.err{ background: var(--err); }
+
+  .meters{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+  .meter-box{ }
+  .meter-label{
+    font-size: 10px; text-transform: uppercase; letter-spacing:.08em;
+    color: var(--dim); margin-bottom: 6px;
+    display:flex; justify-content:space-between;
+  }
+  .meter-label b{ color: var(--ink); font-weight:600; }
+  .meter{
+    height: 34px;
+    background: #0a0c0a;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    display:flex; align-items:flex-end; gap:2px;
+    padding: 3px;
+    overflow:hidden;
+  }
+  .meter .bar{
+    flex:1;
+    background: var(--live-dim);
+    height: 6%;
+    border-radius: 1px;
+    transition: height .06s linear, background .06s linear;
+  }
+
+  .log{
+    background: #0a0c0a;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 10px 12px;
+    height: 200px;
+    overflow-y: auto;
+    font-size: 11.5px;
+    line-height: 1.6;
+  }
+  .log div{ white-space: pre-wrap; word-break: break-word; }
+  .log .t{ color: var(--dim); }
+  .log .ev{ color: var(--live); }
+  .log .er{ color: var(--err); }
+  .log .sd{ color: #6b93c2; }
+
+  audio{ display:none; }
+
+  .foot{
+    margin-top: 12px;
+    color: var(--dim);
+    font-size: 10.5px;
+    display:flex; justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+<div class="rig">
+
+  <div class="head">
+    <h1>session probe <span>/ audio in&nbsp;&nbsp;→&nbsp;&nbsp;audio out</span></h1>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+
+  <div class="row">
+    <input type="text" id="base" value="http://localhost:8000/api" spellcheck="false" />
+  </div>
+
+  <div class="panel">
+    <div class="btns">
+      <button id="btnConnect" class="primary">connect + offer</button>
+      <button id="btnStart" disabled>start</button>
+      <button id="btnStop" class="stop" disabled>stop</button>
+    </div>
+
+    <div class="status-line">
+      <div class="dot" id="dot"></div>
+      <span id="statusText">idle — no session</span>
+    </div>
+
+    <div class="meters">
+      <div class="meter-box">
+        <div class="meter-label"><span>mic → sent</span><b id="micDb">-∞</b></div>
+        <div class="meter" id="micMeter"></div>
+      </div>
+      <div class="meter-box">
+        <div class="meter-label"><span>response → heard</span><b id="outDb">-∞</b></div>
+        <div class="meter" id="outMeter"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="log" id="log"></div>
+  </div>
+
+  <audio id="remoteAudio" autoplay playsinline></audio>
+
+  <div class="foot">
+    <span id="sessionId">session: —</span>
+    <span>ontrack fires only once remote audio actually arrives</span>
+  </div>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const logEl = $("log"), dot = $("dot"), statusText = $("statusText"), sessionIdEl = $("sessionId");
+const btnConnect = $("btnConnect"), btnStart = $("btnStart"), btnStop = $("btnStop");
+const micMeter = $("micMeter"), outMeter = $("outMeter"), micDb = $("micDb"), outDb = $("outDb");
+const remoteAudio = $("remoteAudio");
+
+let pc = null, localStream = null, sessionId = null;
+let audioCtx = null, micAnalyser = null, outAnalyser = null, rafId = null;
+let gotRemoteTrack = false;
+
+// bar grids
+const BARS = 20;
+function buildBars(container){
+  container.innerHTML = "";
+  for (let i=0;i<BARS;i++){
+    const b = document.createElement("div");
+    b.className = "bar";
+    container.appendChild(b);
+  }
+}
+buildBars(micMeter);
+buildBars(outMeter);
+
+function log(msg, cls=""){
+  const t = new Date().toLocaleTimeString([], {hour12:false});
+  const line = document.createElement("div");
+  const tSpan = document.createElement("span");
+  tSpan.className = "t";
+  tSpan.textContent = t;
+  const msgSpan = document.createElement("span");
+  msgSpan.className = cls;
+  msgSpan.textContent = msg;
+  line.append(tSpan, document.createTextNode("  "), msgSpan);
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(text, mode){
+  statusText.textContent = text;
+  dot.className = "dot" + (mode ? " " + mode : "");
+}
+
+function tick(){
+  const clock = $("clock");
+  clock.textContent = new Date().toLocaleTimeString([], {hour12:false});
+}
+setInterval(tick, 1000); tick();
+
+function dbFromByte(v){
+  if (v <= 1) return "-∞";
+  const db = 20 * Math.log10(v/255);
+  return db.toFixed(0);
+}
+
+function drawMeter(analyser, container, dbLabelEl){
+  if (!analyser){
+    [...container.children].forEach(b => b.style.height = "6%");
+    dbLabelEl.textContent = "-∞";
+    return;
+  }
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(data);
+  const step = Math.floor(data.length / BARS);
+  let peak = 0;
+  [...container.children].forEach((bar, i) => {
+    const v = data[i*step] || 0;
+    peak = Math.max(peak, v);
+    const pct = Math.max(6, (v/255)*100);
+    bar.style.height = pct + "%";
+    bar.style.background = pct > 70 ? "#7fd858" : (pct > 25 ? "#4f9a3a" : "#2c4a22");
+  });
+  dbLabelEl.textContent = dbFromByte(peak);
+}
+
+function loopMeters(){
+  drawMeter(micAnalyser, micMeter, micDb);
+  drawMeter(outAnalyser, outMeter, outDb);
+  rafId = requestAnimationFrame(loopMeters);
+}
+
+function apiBase(){
+  return $("base").value.replace(/\/+$/, "");
+}
+
+async function connectAndOffer(){
+  btnConnect.disabled = true;
+  gotRemoteTrack = false;
+  try{
+    log("requesting microphone…");
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    log("mic acquired", "ev");
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const micSrc = audioCtx.createMediaStreamSource(localStream);
+    micAnalyser = audioCtx.createAnalyser();
+    micAnalyser.fftSize = 256;
+    micSrc.connect(micAnalyser);
+    if (!rafId) loopMeters();
+
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
+
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    // Pipecat's SmallWebRTCConnection expects a data channel for control
+    // messages alongside the audio track — without this it'll wait 10s
+    // and log a "data channel not established" warning server-side.
+    const dataChannel = pc.createDataChannel("chat");
+    dataChannel.onopen = () => log("data channel open", "ev");
+    dataChannel.onclose = () => log("data channel closed", "sd");
+    dataChannel.onmessage = (e) => log(`data channel message: ${e.data}`, "sd");
+
+    pc.ontrack = (event) => {
+      gotRemoteTrack = true;
+      log(`ontrack: remote ${event.track.kind} track received`, "ev");
+      remoteAudio.srcObject = event.streams[0];
+      const outSrc = audioCtx.createMediaStreamSource(event.streams[0]);
+      outAnalyser = audioCtx.createAnalyser();
+      outAnalyser.fftSize = 256;
+      outSrc.connect(outAnalyser);
+      setStatus("connected — response audio flowing", "live");
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      log(`ice state: ${pc.iceConnectionState}`, "sd");
+      if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected"){
+        setStatus("ice " + pc.iceConnectionState, "err");
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      log(`peer connection state: ${pc.connectionState}`, "sd");
+    };
+
+    log("creating offer…");
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    log(`ice gathering state: ${pc.iceGatheringState}`, "sd");
+
+    pc.addEventListener("icecandidate", (e) => {
+      log(e.candidate ? `ice candidate: ${e.candidate.type || "?"} ${e.candidate.protocol || ""}` : "ice candidate: (end of candidates)", "sd");
+    });
+
+    // wait for ICE gathering to finish so the SDP is complete, but don't
+    // hang forever if STUN is blocked/slow (e.g. VPN, corporate network) —
+    // for local testing host candidates alone are usually enough.
+    const GATHER_TIMEOUT_MS = 3000;
+    await new Promise((resolve) => {
+      if (pc.iceGatheringState === "complete") return resolve();
+      const check = () => {
+        if (pc.iceGatheringState === "complete"){
+          cleanup();
+          resolve();
+        }
+      };
+      const timer = setTimeout(() => {
+        log(`gathering timed out after ${GATHER_TIMEOUT_MS}ms — proceeding with candidates gathered so far`, "sd");
+        cleanup();
+        resolve();
+      }, GATHER_TIMEOUT_MS);
+      function cleanup(){
+        clearTimeout(timer);
+        pc.removeEventListener("icegatheringstatechange", check);
+      }
+      pc.addEventListener("icegatheringstatechange", check);
+    });
+
+    log("posting offer to /sessions/create …", "sd");
+    const res = await fetch(`${apiBase()}/sessions/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sdp: pc.localDescription.sdp,
+        type: pc.localDescription.type
+      })
+    });
+
+    if (!res.ok){
+      throw new Error(`create failed: ${res.status} ${await res.text()}`);
+    }
+
+    const data = await res.json();
+    sessionId = data.session_id;
+    sessionIdEl.textContent = "session: " + sessionId;
+    log(`got answer for session ${sessionId}`, "ev");
+
+    await pc.setRemoteDescription({ sdp: data.sdp, type: data.type });
+    log("remote description set — negotiation complete", "sd");
+
+    setStatus("connected — waiting on start", "warn");
+    btnStart.disabled = false;
+    btnStop.disabled = false;
+
+  } catch(err){
+    log("error: " + err.message, "er");
+    setStatus("connect failed", "err");
+    btnConnect.disabled = false;
+  }
+}
+
+async function startSession(){
+  if (!sessionId) return;
+  btnStart.disabled = true;
+  try{
+    log(`posting /sessions/${sessionId}/start …`, "sd");
+    const res = await fetch(`${apiBase()}/sessions/${sessionId}/start`, { method: "POST" });
+    if (!res.ok) throw new Error(`start failed: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    log(`status: ${data.status}`, "ev");
+    setStatus("running — speak and listen for a response", "live");
+
+    setTimeout(() => {
+      if (!gotRemoteTrack){
+        log("no remote audio track received yet — check the server is sending a track back", "er");
+      }
+    }, 6000);
+
+  } catch(err){
+    log("error: " + err.message, "er");
+    btnStart.disabled = false;
+  }
+}
+
+async function stopSession(){
+  btnStop.disabled = true;
+  btnStart.disabled = true;
+  try{
+    if (sessionId){
+      log(`posting /sessions/${sessionId}/stop …`, "sd");
+      const res = await fetch(`${apiBase()}/sessions/${sessionId}/stop`, { method: "POST" });
+      if (res.ok){
+        const data = await res.json();
+        log(`status: ${data.status}`, "ev");
+      } else {
+        log(`stop failed: ${res.status}`, "er");
+      }
+    }
+  } catch(err){
+    log("error: " + err.message, "er");
+  }
+
+  if (pc){ pc.close(); pc = null; }
+  if (localStream){ localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  micAnalyser = null; outAnalyser = null;
+  remoteAudio.srcObject = null;
+  sessionId = null;
+  sessionIdEl.textContent = "session: —";
+  setStatus("idle — no session", "");
+  btnConnect.disabled = false;
+}
+
+btnConnect.addEventListener("click", connectAndOffer);
+btnStart.addEventListener("click", startSession);
+btnStop.addEventListener("click", stopSession);
+</script>
+</body>
+</html>
