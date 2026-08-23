@@ -21,9 +21,9 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(session_manager.start_runner())
 
     yield  # The app serves requests while frozen here
-    
+
     # Everything AFTER 'yield' runs on shutdown
-    pass
+    await session_manager.shutdown()
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
@@ -36,4 +36,4 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api")
-app.include_router(sessions_router, prefix="/api")
+app.include_router(interview_router, prefix="/api")
