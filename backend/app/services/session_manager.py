@@ -23,10 +23,13 @@ class Session:
 class SessionManager:
     def __init__(self):
         self._sessions: dict[str, Session] = {}
-        self._runner: WorkerRunner = WorkerRunner(handle_sigint=True, handle_sigterm=True)
+        self._runner: WorkerRunner = WorkerRunner(handle_sigint=False, handle_sigterm=False)
 
     async def start_runner(self):
         await self._runner.run(auto_end=False)
+
+    async def shutdown(self):
+        await self._runner.cancel(reason="app shutdown")
 
     def create(self, connection: SmallWebRTCConnection) -> Session:
         session_id = str(uuid4())
