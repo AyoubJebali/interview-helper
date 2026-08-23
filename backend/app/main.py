@@ -36,4 +36,4 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api")
-app.include_router(interview_router, prefix="/api")
+app.include_router(sessions_router, prefix="/api")
